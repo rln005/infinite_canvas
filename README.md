@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Infinite Canvas
 
-## Getting Started
+A shared online canvas where anyone can draw, save, and explore artwork created by people around the world.
 
-First, run the development server:
+## Live Website
+https://brooks-was-here-psi.vercel.app/
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+* Infinite-style canvas experience
+* Draw freely using a pencil tool
+* Adjustable brush size
+* Custom colors
+* Eraser tool
+* Zoom in and out
+* Pan around the canvas
+* Save drawings to the cloud using Supabase
+* Load the latest saved drawing
+* Works directly in the browser
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Built With
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+* Next.js
+* React
+* Fabric.js
+* Supabase
+* Vercel
 
-## Learn More
+## How It Works
 
-To learn more about Next.js, take a look at the following resources:
+Users can draw on a large shared canvas, customize their brush settings, navigate using zoom and pan controls, and save their work to the database.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Controls
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Drawing
 
-## Deploy on Vercel
+* Left Mouse Button: Draw
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Navigation
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+* Mouse Wheel: Zoom In / Zoom Out
+* ALT + Drag: Pan Around Canvas
+
+### Toolbar
+
+* Save: Save current drawing
+* Pencil: Switch to drawing mode
+* Eraser: Erase parts of the drawing
+* Color Picker: Select drawing color
+* Brush Slider: Change brush size
+
+## Future Plans
+
+* Real-time collaboration
+* True infinite canvas
+* User accounts
+* Individual stroke storage
+* Undo / Redo
+* Layer support
+* Public gallery
+* Mobile optimization
+
+## Creator
+
+Made by R.L. Narayana
+
+---
+
+Built in public with Next.js, Fabric.js, and a stubborn refusal to pay for expensive software before proving the idea works.
+
