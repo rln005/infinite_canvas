@@ -36,15 +36,25 @@ export default function InfiniteCanvas() {
       console.log('User authenticated:', user?.id)
       setUserId(user?.id ?? null)
 
-      // FIX: size the canvas to the viewport instead of a fixed 10000x10000
-      // surface. "Infinite" feel comes from panning/zooming the viewport,
-      // not from an enormous backing canvas (which kills perf and breaks
-      // mobile layout/visibility of overlays like the watermark).
+      // FIX: Create a truly infinite canvas (100000x100000 px backing surface)
+      // The viewport shows only a small window into this massive surface.
+      // Users can pan and zoom to explore the entire infinite workspace.
+      const CANVAS_SIZE = 100000
       const canvas = new Canvas(canvasRef.current!, {
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width: CANVAS_SIZE,
+        height: CANVAS_SIZE,
         backgroundColor: 'white',
       })
+
+      // Start viewport centered on the canvas
+      const startZoom = Math.min(
+        window.innerWidth / CANVAS_SIZE,
+        window.innerHeight / CANVAS_SIZE
+      )
+      const startX = (CANVAS_SIZE - window.innerWidth / startZoom) / 2
+      const startY = (CANVAS_SIZE - window.innerHeight / startZoom) / 2
+      
+      canvas.setViewportTransform([startZoom, 0, 0, startZoom, -startX * startZoom, -startY * startZoom])
 
       canvasInstanceRef.current = canvas
 
@@ -142,8 +152,8 @@ export default function InfiniteCanvas() {
 
         zoom *= 0.999 ** delta
 
-        if (zoom > 20) zoom = 20
-        if (zoom < 0.1) zoom = 0.1
+        if (zoom > 50) zoom = 50
+        if (zoom < 0.01) zoom = 0.01
 
         canvas.zoomToPoint(
           new Point(opt.e.offsetX, opt.e.offsetY),
@@ -224,8 +234,8 @@ export default function InfiniteCanvas() {
             let zoom =
               canvas.getZoom() * (newDistance / pinchState.distance)
 
-            if (zoom > 20) zoom = 20
-            if (zoom < 0.1) zoom = 0.1
+            if (zoom > 50) zoom = 50
+            if (zoom < 0.01) zoom = 0.01
 
             canvas.zoomToPoint(
               new Point(newMidpoint.x, newMidpoint.y),
@@ -264,14 +274,10 @@ export default function InfiniteCanvas() {
       })
 
       // ---------------------------------------------------------------
-      // FIX: keep the canvas sized to the viewport on resize/orientation
-      // change so it never grows beyond the visible screen.
+      // FIX: keep rendering on window resize so viewport updates properly
+      // (canvas stays 100000x100000, only the view changes)
       // ---------------------------------------------------------------
       const handleResize = () => {
-        canvas.setDimensions({
-          width: window.innerWidth,
-          height: window.innerHeight,
-        })
         canvas.requestRenderAll()
       }
 
