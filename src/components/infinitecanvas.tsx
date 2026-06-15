@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, PencilBrush, Point } from 'fabric'
-import { supabase } from '@/lib/superbase'
+import { supabase } from '@/lib/supabase'
 
 export default function InfiniteCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
