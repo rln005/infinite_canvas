@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 export default function InfiniteCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasInstanceRef = useRef<Canvas | null>(null)
 
   const [canvasInstance, setCanvasInstance] =
     useState<Canvas | null>(null)
@@ -17,11 +18,17 @@ export default function InfiniteCanvas() {
     if (!canvasRef.current) return
 
     const initCanvas = async () => {
+      // FIX: size the canvas to the viewport instead of a fixed 10000x10000
+      // surface. "Infinite" feel comes from panning/zooming the viewport,
+      // not from an enormous backing canvas (which kills perf and breaks
+      // mobile layout/visibility of overlays like the watermark).
       const canvas = new Canvas(canvasRef.current!, {
-        width: 10000,
-        height: 10000,
+        width: window.innerWidth,
+        height: window.innerHeight,
         backgroundColor: 'white',
       })
+
+      canvasInstanceRef.current = canvas
 
       ;(canvas as any).allowTouchScrolling = false
 
@@ -45,6 +52,28 @@ export default function InfiniteCanvas() {
         canvas.requestRenderAll()
       }
 
+      // ---------------------------------------------------------------
+      // FIX: brush state restoration helpers. Any pan/zoom gesture
+      // (alt-drag on desktop, two-finger pan/pinch on mobile) now
+      // temporarily disables drawing mode and restores it afterwards,
+      // so the active tool (pencil/eraser) is never lost.
+      // ---------------------------------------------------------------
+      let wasDrawingMode = canvas.isDrawingMode
+
+      const startGesture = () => {
+        wasDrawingMode = canvas.isDrawingMode
+        canvas.isDrawingMode = false
+        canvas.selection = false
+      }
+
+      const endGesture = () => {
+        canvas.isDrawingMode = wasDrawingMode
+        canvas.selection = !wasDrawingMode
+      }
+
+      // ---------------------------------------------------------------
+      // Desktop: alt + drag to pan
+      // ---------------------------------------------------------------
       let isPanning = false
 
       canvas.on('mouse:down', (opt) => {
@@ -52,7 +81,7 @@ export default function InfiniteCanvas() {
 
         if (evt.altKey) {
           isPanning = true
-          canvas.selection = false
+          startGesture()
         }
       })
 
@@ -66,16 +95,22 @@ export default function InfiniteCanvas() {
         if (vpt) {
           vpt[4] += evt.movementX
           vpt[5] += evt.movementY
+          canvas.setViewportTransform(vpt)
         }
 
         canvas.requestRenderAll()
       })
 
       canvas.on('mouse:up', () => {
-        isPanning = false
-        canvas.selection = true
+        if (isPanning) {
+          isPanning = false
+          endGesture()
+        }
       })
 
+      // ---------------------------------------------------------------
+      // Desktop: wheel to zoom
+      // ---------------------------------------------------------------
       canvas.on('mouse:wheel', (opt) => {
         const delta = opt.e.deltaY
 
@@ -84,7 +119,6 @@ export default function InfiniteCanvas() {
         zoom *= 0.999 ** delta
 
         if (zoom > 20) zoom = 20
-
         if (zoom < 0.1) zoom = 0.1
 
         canvas.zoomToPoint(
@@ -95,10 +129,169 @@ export default function InfiniteCanvas() {
         opt.e.preventDefault()
         opt.e.stopPropagation()
       })
+
+      // ---------------------------------------------------------------
+      // FIX: mobile two-finger pan + pinch-to-zoom. Listeners are bound
+      // with passive: false so we can preventDefault() and stop the
+      // browser's native scroll/zoom from competing with the canvas.
+      // ---------------------------------------------------------------
+      const wrapperEl: HTMLElement =
+        (canvas as any).wrapperEl ??
+        canvasRef.current!.parentElement ??
+        canvasRef.current!
+
+      let pinchState: {
+        distance: number
+        midpoint: { x: number; y: number }
+      } | null = null
+
+      const getTouchPoint = (touch: Touch) => {
+        const rect = wrapperEl.getBoundingClientRect()
+        return {
+          x: touch.clientX - rect.left,
+          y: touch.clientY - rect.top,
+        }
+      }
+
+      const getDistance = (t0: Touch, t1: Touch) => {
+        const p0 = getTouchPoint(t0)
+        const p1 = getTouchPoint(t1)
+        return Math.hypot(p1.x - p0.x, p1.y - p0.y)
+      }
+
+      const getMidpoint = (t0: Touch, t1: Touch) => {
+        const p0 = getTouchPoint(t0)
+        const p1 = getTouchPoint(t1)
+        return {
+          x: (p0.x + p1.x) / 2,
+          y: (p0.y + p1.y) / 2,
+        }
+      }
+
+      const handleTouchStart = (e: TouchEvent) => {
+        if (e.touches.length === 2) {
+          startGesture()
+
+          pinchState = {
+            distance: getDistance(e.touches[0], e.touches[1]),
+            midpoint: getMidpoint(e.touches[0], e.touches[1]),
+          }
+
+          e.preventDefault()
+        }
+      }
+
+      const handleTouchMove = (e: TouchEvent) => {
+        if (e.touches.length === 2 && pinchState) {
+          const newDistance = getDistance(e.touches[0], e.touches[1])
+          const newMidpoint = getMidpoint(e.touches[0], e.touches[1])
+
+          // two-finger pan, based on midpoint movement
+          const vpt = canvas.viewportTransform
+
+          if (vpt) {
+            vpt[4] += newMidpoint.x - pinchState.midpoint.x
+            vpt[5] += newMidpoint.y - pinchState.midpoint.y
+            canvas.setViewportTransform(vpt)
+          }
+
+          // pinch zoom, based on distance change between fingers
+          if (pinchState.distance > 0) {
+            let zoom =
+              canvas.getZoom() * (newDistance / pinchState.distance)
+
+            if (zoom > 20) zoom = 20
+            if (zoom < 0.1) zoom = 0.1
+
+            canvas.zoomToPoint(
+              new Point(newMidpoint.x, newMidpoint.y),
+              zoom
+            )
+          }
+
+          pinchState = {
+            distance: newDistance,
+            midpoint: newMidpoint,
+          }
+
+          canvas.requestRenderAll()
+          e.preventDefault()
+        }
+      }
+
+      const handleTouchEnd = (e: TouchEvent) => {
+        if (e.touches.length < 2 && pinchState) {
+          pinchState = null
+          endGesture()
+        }
+      }
+
+      wrapperEl.addEventListener('touchstart', handleTouchStart, {
+        passive: false,
+      })
+      wrapperEl.addEventListener('touchmove', handleTouchMove, {
+        passive: false,
+      })
+      wrapperEl.addEventListener('touchend', handleTouchEnd, {
+        passive: false,
+      })
+      wrapperEl.addEventListener('touchcancel', handleTouchEnd, {
+        passive: false,
+      })
+
+      // ---------------------------------------------------------------
+      // FIX: keep the canvas sized to the viewport on resize/orientation
+      // change so it never grows beyond the visible screen.
+      // ---------------------------------------------------------------
+      const handleResize = () => {
+        canvas.setDimensions({
+          width: window.innerWidth,
+          height: window.innerHeight,
+        })
+        canvas.requestRenderAll()
+      }
+
+      window.addEventListener('resize', handleResize)
+
+      ;(canvas as any).__cleanup = () => {
+        window.removeEventListener('resize', handleResize)
+        wrapperEl.removeEventListener('touchstart', handleTouchStart)
+        wrapperEl.removeEventListener('touchmove', handleTouchMove)
+        wrapperEl.removeEventListener('touchend', handleTouchEnd)
+        wrapperEl.removeEventListener('touchcancel', handleTouchEnd)
+      }
     }
 
     initCanvas()
-  }, [])
+
+    // -------------------------------------------------------------------
+    // FIX: lock page scroll/zoom while this component is mounted so
+    // browser scrolling/pinch-zoom doesn't fight with canvas gestures
+    // on touch devices.
+    // -------------------------------------------------------------------
+    const originalHtmlOverflow = document.documentElement.style.overflow
+    const originalBodyOverflow = document.body.style.overflow
+    const originalBodyMargin = document.body.style.margin
+    const originalHtmlTouchAction = document.documentElement.style.touchAction
+
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    document.body.style.margin = '0'
+    document.documentElement.style.touchAction = 'none'
+
+    return () => {
+      document.documentElement.style.overflow = originalHtmlOverflow
+      document.body.style.overflow = originalBodyOverflow
+      document.body.style.margin = originalBodyMargin
+      document.documentElement.style.touchAction = originalHtmlTouchAction
+
+      if (canvasInstanceRef.current) {
+        ;(canvasInstanceRef.current as any).__cleanup?.()
+        canvasInstanceRef.current.dispose()
+        canvasInstanceRef.current = null
+      }
+    }
+  }, [color, brushSize])
 
   const saveCanvas = async () => {
     if (!canvasInstance) return
@@ -115,6 +308,23 @@ export default function InfiniteCanvas() {
     } else {
       alert('Saved')
     }
+  }
+
+  // FIX: missing Clear button handler — wipes all objects, resets the
+  // background, and re-applies the current brush so drawing keeps working.
+  const clearCanvas = () => {
+    if (!canvasInstance) return
+
+    canvasInstance.clear()
+    canvasInstance.backgroundColor = 'white'
+
+    if (canvasInstance.freeDrawingBrush) {
+      canvasInstance.freeDrawingBrush.color = color
+      canvasInstance.freeDrawingBrush.width = brushSize
+    }
+
+    canvasInstance.isDrawingMode = true
+    canvasInstance.requestRenderAll()
   }
 
   const changeColor = (newColor: string) => {
@@ -138,6 +348,7 @@ export default function InfiniteCanvas() {
   const activateBrush = () => {
     if (!canvasInstance?.freeDrawingBrush) return
 
+    canvasInstance.isDrawingMode = true
     canvasInstance.freeDrawingBrush.color =
       color
   }
@@ -145,12 +356,26 @@ export default function InfiniteCanvas() {
   const activateEraser = () => {
     if (!canvasInstance?.freeDrawingBrush) return
 
+    canvasInstance.isDrawingMode = true
     canvasInstance.freeDrawingBrush.color =
       'white'
   }
 
   return (
-    <>
+    // FIX: viewport-locked wrapper. Combined with the canvas now being
+    // sized to window.innerWidth/innerHeight, this keeps the watermark
+    // and toolbar correctly positioned and visible on mobile.
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        touchAction: 'none',
+      }}
+    >
       <div
         style={{
           position: 'fixed',
@@ -166,6 +391,8 @@ export default function InfiniteCanvas() {
           borderRadius: 10,
           boxShadow:
             '0 4px 20px rgba(0,0,0,0.2)',
+          flexWrap: 'wrap',
+          maxWidth: 'calc(100vw - 20px)',
         }}
       >
         <button
@@ -180,6 +407,20 @@ export default function InfiniteCanvas() {
           }}
         >
           Save
+        </button>
+
+        <button
+          onClick={clearCanvas}
+          style={{
+            background: '#6b7280',
+            color: 'white',
+            border: 'none',
+            padding: '8px 12px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+          }}
+        >
+          Clear
         </button>
 
         <button
@@ -256,15 +497,16 @@ export default function InfiniteCanvas() {
         <br />
         R.L. Narayana
       </div>
+
       <canvas
-       ref={canvasRef}
-       style={{
-        touchAction: 'none',
-        WebkitTouchCallout: 'none',
-        WebkitUserSelect: 'none',
-        userSelect: 'none',
-  }}
-/>
-    </>
+        ref={canvasRef}
+        style={{
+          touchAction: 'none',
+          WebkitTouchCallout: 'none',
+          WebkitUserSelect: 'none',
+          userSelect: 'none',
+        }}
+      />
+    </div>
   )
 }
