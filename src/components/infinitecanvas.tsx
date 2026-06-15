@@ -54,19 +54,16 @@ export default function InfiniteCanvas() {
 
       setCanvasInstance(canvas)
 
-      // Load current user's drawings
-      if (user?.id) {
-        const { data } = await supabase
-          .from('drawings')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('id', { ascending: false })
-          .limit(1)
+      // Load the shared canvas (all drawings from all users)
+      const { data } = await supabase
+        .from('drawings')
+        .select('*')
+        .order('id', { ascending: false })
+        .limit(1)
 
-        if (data && data.length > 0) {
-          await canvas.loadFromJSON(data[0].data)
-          canvas.requestRenderAll()
-        }
+      if (data && data.length > 0) {
+        await canvas.loadFromJSON(data[0].data)
+        canvas.requestRenderAll()
       }
 
       // ---------------------------------------------------------------
@@ -335,24 +332,12 @@ export default function InfiniteCanvas() {
     }
   }
 
-  // FIX: Clear button handler — deletes only the current user's drawings
-  // from the database and clears the canvas. Does not affect other users' drawings.
-  const clearCanvas = async () => {
-    if (!canvasInstance || !userId) return
+  // FIX: Clear button handler — clears only the current drawing on canvas.
+  // Saved drawings are permanent and cannot be deleted.
+  const clearCanvas = () => {
+    if (!canvasInstance) return
 
-    // Delete current user's drawings from database
-    const { error } = await supabase
-      .from('drawings')
-      .delete()
-      .eq('user_id', userId)
-
-    if (error) {
-      console.error(error)
-      alert('Clear failed')
-      return
-    }
-
-    // Clear the canvas display
+    // Clear the canvas display only (does not delete from database)
     canvasInstance.clear()
     canvasInstance.backgroundColor = 'white'
 
@@ -363,7 +348,6 @@ export default function InfiniteCanvas() {
 
     canvasInstance.isDrawingMode = true
     canvasInstance.requestRenderAll()
-    alert('Your drawings cleared')
   }
 
   const changeColor = (newColor: string) => {
