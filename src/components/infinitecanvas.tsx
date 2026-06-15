@@ -13,11 +13,16 @@ export default function InfiniteCanvas() {
 
   const [color, setColor] = useState('#ff0000')
   const [brushSize, setBrushSize] = useState(10)
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!canvasRef.current) return
 
     const initCanvas = async () => {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      setUserId(user?.id ?? null)
+
       // FIX: size the canvas to the viewport instead of a fixed 10000x10000
       // surface. "Infinite" feel comes from panning/zooming the viewport,
       // not from an enormous backing canvas (which kills perf and breaks
@@ -294,13 +299,13 @@ export default function InfiniteCanvas() {
   }, [color, brushSize])
 
   const saveCanvas = async () => {
-    if (!canvasInstance) return
+    if (!canvasInstance || !userId) return
 
     const data = canvasInstance.toJSON()
 
     const { error } = await supabase
       .from('drawings')
-      .insert([{ data }])
+      .insert([{ data, user_id: userId }])
 
     if (error) {
       console.error(error)
@@ -310,11 +315,24 @@ export default function InfiniteCanvas() {
     }
   }
 
-  // FIX: missing Clear button handler — wipes all objects, resets the
-  // background, and re-applies the current brush so drawing keeps working.
-  const clearCanvas = () => {
-    if (!canvasInstance) return
+  // FIX: Clear button handler — deletes only the current user's drawings
+  // from the database and clears the canvas. Does not affect other users' drawings.
+  const clearCanvas = async () => {
+    if (!canvasInstance || !userId) return
 
+    // Delete current user's drawings from database
+    const { error } = await supabase
+      .from('drawings')
+      .delete()
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error(error)
+      alert('Clear failed')
+      return
+    }
+
+    // Clear the canvas display
     canvasInstance.clear()
     canvasInstance.backgroundColor = 'white'
 
@@ -325,6 +343,7 @@ export default function InfiniteCanvas() {
 
     canvasInstance.isDrawingMode = true
     canvasInstance.requestRenderAll()
+    alert('Your drawings cleared')
   }
 
   const changeColor = (newColor: string) => {
