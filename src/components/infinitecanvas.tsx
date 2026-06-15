@@ -15,12 +15,20 @@ export default function InfiniteCanvas() {
   const [brushSize, setBrushSize] = useState(10)
   const [userId, setUserId] = useState<string | null>(null)
 
+  // Canvas initialization - runs once on mount
   useEffect(() => {
     if (!canvasRef.current) return
 
     const initCanvas = async () => {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
+      // Get current user or create anonymous session
+      let { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        // Create anonymous session if user not logged in
+        const { data: anonSession } = await supabase.auth.signInAnonymously()
+        user = anonSession?.user ?? null
+      }
+      
       setUserId(user?.id ?? null)
 
       // FIX: size the canvas to the viewport instead of a fixed 10000x10000
@@ -46,15 +54,19 @@ export default function InfiniteCanvas() {
 
       setCanvasInstance(canvas)
 
-      const { data } = await supabase
-        .from('drawings')
-        .select('*')
-        .order('id', { ascending: false })
-        .limit(1)
+      // Load current user's drawings
+      if (user?.id) {
+        const { data } = await supabase
+          .from('drawings')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('id', { ascending: false })
+          .limit(1)
 
-      if (data && data.length > 0) {
-        await canvas.loadFromJSON(data[0].data)
-        canvas.requestRenderAll()
+        if (data && data.length > 0) {
+          await canvas.loadFromJSON(data[0].data)
+          canvas.requestRenderAll()
+        }
       }
 
       // ---------------------------------------------------------------
@@ -296,7 +308,15 @@ export default function InfiniteCanvas() {
         canvasInstanceRef.current = null
       }
     }
-  }, [color, brushSize])
+  }, [])
+
+  // Update brush properties when color or size changes - doesn't reinitialize canvas
+  useEffect(() => {
+    if (!canvasInstance?.freeDrawingBrush) return
+    
+    canvasInstance.freeDrawingBrush.color = color
+    canvasInstance.freeDrawingBrush.width = brushSize
+  }, [color, brushSize, canvasInstance])
 
   const saveCanvas = async () => {
     if (!canvasInstance || !userId) return
