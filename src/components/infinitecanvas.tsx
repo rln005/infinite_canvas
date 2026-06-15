@@ -25,10 +25,14 @@ export default function InfiniteCanvas() {
       
       if (!user) {
         // Create anonymous session if user not logged in
-        const { data: anonSession } = await supabase.auth.signInAnonymously()
+        const { data: anonSession, error: anonError } = await supabase.auth.signInAnonymously()
         user = anonSession?.user ?? null
+        if (anonError) {
+          console.error('Anonymous auth error:', anonError)
+        }
       }
       
+      console.log('User authenticated:', user?.id)
       setUserId(user?.id ?? null)
 
       // FIX: size the canvas to the viewport instead of a fixed 10000x10000
@@ -316,19 +320,31 @@ export default function InfiniteCanvas() {
   }, [color, brushSize, canvasInstance])
 
   const saveCanvas = async () => {
-    if (!canvasInstance || !userId) return
+    if (!canvasInstance) {
+      alert('Canvas not ready')
+      return
+    }
+
+    if (!userId) {
+      alert('User not authenticated')
+      return
+    }
 
     const data = canvasInstance.toJSON()
 
-    const { error } = await supabase
+    console.log('Saving with userId:', userId)
+
+    const { data: insertData, error } = await supabase
       .from('drawings')
       .insert([{ data, user_id: userId }])
+      .select()
 
     if (error) {
-      console.error(error)
-      alert('Save failed')
+      console.error('Save error:', error)
+      alert(`Save failed: ${error.message}`)
     } else {
-      alert('Saved')
+      console.log('Saved successfully:', insertData)
+      alert('Saved!')
     }
   }
 
