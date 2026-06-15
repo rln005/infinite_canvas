@@ -14,6 +14,7 @@ export default function InfiniteCanvas() {
   const [color, setColor] = useState('#ff0000')
   const [brushSize, setBrushSize] = useState(10)
   const [userId, setUserId] = useState<string | null>(null)
+  const [savedCanvasState, setSavedCanvasState] = useState<string | null>(null)
 
   // Canvas initialization - runs once on mount
   useEffect(() => {
@@ -68,6 +69,11 @@ export default function InfiniteCanvas() {
       if (data && data.length > 0) {
         await canvas.loadFromJSON(data[0].data)
         canvas.requestRenderAll()
+        // Save this as the "baseline" - the protected saved drawing
+        setSavedCanvasState(JSON.stringify(data[0].data))
+      } else {
+        // No existing drawing, save blank canvas as baseline
+        setSavedCanvasState(JSON.stringify(canvas.toJSON()))
       }
 
       // ---------------------------------------------------------------
@@ -344,26 +350,32 @@ export default function InfiniteCanvas() {
       alert(`Save failed: ${error.message}`)
     } else {
       console.log('Saved successfully:', insertData)
+      // Update the saved baseline - this drawing is now protected
+      setSavedCanvasState(JSON.stringify(data))
       alert('Saved!')
     }
   }
 
-  // FIX: Clear button handler — clears only the current drawing on canvas.
-  // Saved drawings are permanent and cannot be deleted.
-  const clearCanvas = () => {
-    if (!canvasInstance) return
+  // FIX: Clear button handler — restores canvas to the last saved state.
+  // Only clears unsaved drawing, preserves all saved work.
+  const clearCanvas = async () => {
+    if (!canvasInstance || !savedCanvasState) return
 
-    // Clear the canvas display only (does not delete from database)
-    canvasInstance.clear()
-    canvasInstance.backgroundColor = 'white'
-
-    if (canvasInstance.freeDrawingBrush) {
-      canvasInstance.freeDrawingBrush.color = color
-      canvasInstance.freeDrawingBrush.width = brushSize
+    try {
+      // Restore to the saved baseline
+      await canvasInstance.loadFromJSON(JSON.parse(savedCanvasState))
+      canvasInstance.requestRenderAll()
+      
+      // Re-enable drawing mode and brush
+      if (canvasInstance.freeDrawingBrush) {
+        canvasInstance.freeDrawingBrush.color = color
+        canvasInstance.freeDrawingBrush.width = brushSize
+      }
+      canvasInstance.isDrawingMode = true
+    } catch (error) {
+      console.error('Clear error:', error)
+      alert('Clear failed')
     }
-
-    canvasInstance.isDrawingMode = true
-    canvasInstance.requestRenderAll()
   }
 
   const changeColor = (newColor: string) => {
