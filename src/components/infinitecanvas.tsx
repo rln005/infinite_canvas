@@ -23,6 +23,8 @@ export default function InfiniteCanvas() {
         backgroundColor: 'white',
       })
 
+      ;(canvas as any).allowTouchScrolling = false
+
       const brush = new PencilBrush(canvas)
       brush.color = color
       brush.width = brushSize
@@ -254,7 +256,15 @@ export default function InfiniteCanvas() {
         <br />
         R.L. Narayana
       </div>
-      <canvas ref={canvasRef} />
+      <canvas
+       ref={canvasRef}
+       style={{
+        touchAction: 'none',
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+  }}
+/>
     </>
   )
 }
